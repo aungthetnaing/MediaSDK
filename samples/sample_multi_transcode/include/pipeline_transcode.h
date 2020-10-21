@@ -53,6 +53,9 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 #include "sample_defs.h"
 #include "plugin_utils.h"
 #include "preset_manager.h"
+#include "mqtt/async_client.h"
+//#include "common_utils.h"
+#include "ffmpeg_utils.h"
 
 #if (MFX_VERSION >= 1024)
 #include "brc_routines.h"
@@ -309,12 +312,14 @@ namespace TranscodingSample
         mfxU16 nVppCompTileId;
 
         mfxU32 DecoderFourCC;
+        mfxU32 DecoderVPPFourCC;
         mfxU32 EncoderFourCC;
 
         sVppCompDstRect* pVppCompDstRects;
 
         bool bUseOpaqueMemory;
         bool bForceSysMem;
+        mfxU16 DecOutPattern;
         mfxU16 VppOutPattern;
         mfxU16 nGpuCopyMode;
 
@@ -339,6 +344,7 @@ namespace TranscodingSample
 
         mfxU16 BitrateLimit;
 
+
 #if (MFX_VERSION >= 1025)
         mfxU16 numMFEFrames;
         mfxU16 MFMode;
@@ -359,6 +365,8 @@ namespace TranscodingSample
 
         EPresetModes PresetMode;
         bool shouldPrintPresets;
+
+        bool rawInput;
     };
 
     struct sInputParams: public __sInputParams
@@ -673,6 +681,7 @@ namespace TranscodingSample
         virtual mfxStatus DecodeOneFrame(ExtendedSurface *pExtSurface);
         virtual mfxStatus DecodeLastFrame(ExtendedSurface *pExtSurface);
         virtual mfxStatus VPPOneFrame(ExtendedSurface *pSurfaceIn, ExtendedSurface *pExtSurface);
+        mfxStatus   overlay(ExtendedSurface* pExtSurface);
         virtual mfxStatus EncodeOneFrame(ExtendedSurface *pExtSurface, mfxBitstreamWrapper *pBS);
         virtual mfxStatus PreEncOneFrame(ExtendedSurface *pInSurface, ExtendedSurface *pOutSurface);
 
@@ -724,6 +733,7 @@ namespace TranscodingSample
         mfxStatus InitPluginMfxParams(sInputParams *pInParams);
         mfxStatus InitPreEncMfxParams(sInputParams *pInParams);
 
+        virtual mfxU32 FileFourCC2EncFourCC(mfxU32 fcc);
         void FillFrameInfoForEncoding(mfxFrameInfo& info, sInputParams *pInParams);
 
         mfxStatus AllocAndInitVppDoNotUse(sInputParams *pInParams);
@@ -772,6 +782,7 @@ namespace TranscodingSample
         std::unique_ptr<MFXPlugin>        m_pUserDecoderPlugin;
         std::unique_ptr<MFXPlugin>        m_pUserEncoderPlugin;
         std::unique_ptr<MFXPlugin>        m_pUserEncPlugin;
+        std::unique_ptr<mqtt::async_client> m_pCli;
 
         mfxFrameAllocResponse           m_mfxDecResponse;  // memory allocation response for decoder
         mfxFrameAllocResponse           m_mfxEncResponse;  // memory allocation response for encoder
@@ -865,6 +876,8 @@ namespace TranscodingSample
         bool isHEVCSW;
 
         bool m_bInsertIDR;
+
+        bool m_rawInput;
 
         std::unique_ptr<ExtendedBSStore>        m_pBSStore;
 

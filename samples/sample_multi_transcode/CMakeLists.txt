@@ -8,6 +8,7 @@ include_directories (
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/../sample_plugins/vpp_plugin/include
   ${CMAKE_CURRENT_SOURCE_DIR}/../sample_plugins/rotate_cpu/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../tutorials/common/
 )
 
 add_library(
