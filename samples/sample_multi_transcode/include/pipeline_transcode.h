@@ -309,6 +309,7 @@ namespace TranscodingSample
         mfxU16 nVppCompTileId;
 
         mfxU32 DecoderFourCC;
+        mfxU32 EncoderVPPFourCC;
         mfxU32 EncoderFourCC;
 
         sVppCompDstRect* pVppCompDstRects;

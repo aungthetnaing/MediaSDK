@@ -37,6 +37,10 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 
 #include "sample_utils.h"
 
+#include <opencv2/core/core.hpp>
+#include <opencv2/opencv.hpp>
+#include <opencv2/highgui/highgui.hpp>
+
 // let's use std::max and std::min instead
 #undef max
 #undef min

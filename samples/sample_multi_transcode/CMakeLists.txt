@@ -34,4 +34,6 @@ set(DEPENDENCIES itt libmfx dl pthread)
 
 make_executable( shortname universal )
 
+target_link_libraries(${target}  ${OpenCV_LIBS} paho-mqttpp3 paho-mqtt3a ffmpeg_utils -lavformat -lavcodec -lavutil -lswresample)
+
 install( TARGETS ${target} RUNTIME DESTINATION ${MFX_SAMPLES_INSTALL_BIN_DIR} )
