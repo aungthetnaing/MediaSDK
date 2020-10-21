@@ -37,11 +37,6 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 
 #include "sample_utils.h"
 
-#include <opencv2/core/core.hpp>
-#include <opencv2/opencv.hpp>
-#include <opencv2/highgui/highgui.hpp>
-
-
 // let's use std::max and std::min instead
 #undef max
 #undef min
@@ -49,7 +44,6 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 #ifndef MFX_VERSION
 #error MFX_VERSION not defined
 #endif
-#define MSDK_MIN(A, B)                           (((A) < (B)) ? (A) : (B))
 
 using namespace TranscodingSample;
 
@@ -152,7 +146,6 @@ CTranscodingPipeline::CTranscodingPipeline():
     m_NumFramesForReset(0),
     isHEVCSW(false),
     m_bInsertIDR(false),
-    m_rawInput(false),
     m_FrameNumberPreference(0xFFFFFFFF),
     m_MaxFramesForTranscode(0xFFFFFFFF),
     m_pBSProcessor(NULL),
@@ -352,8 +345,7 @@ mfxStatus CTranscodingPipeline::VPPPreInit(sInputParams *pParams)
 #ifdef ENABLE_MCTF
             (VPP_FILTER_DISABLED != pParams->mctfParam.mode) ||
 #endif
-             (pParams->EncoderFourCC && decoderFourCC && pParams->EncoderFourCC != decoderFourCC && m_bEncodeEnable) ||
-             (pParams->DecoderVPPFourCC  && pParams->DecoderVPPFourCC != decoderFourCC && m_bDecodeEnable))
+             (pParams->EncoderFourCC && decoderFourCC && pParams->EncoderFourCC != decoderFourCC && m_bEncodeEnable))
         {
             if (m_bIsFieldWeaving || m_bIsFieldSplitting)
             {
@@ -553,13 +545,7 @@ mfxStatus CTranscodingPipeline::DecodeOneFrame(ExtendedSurface *pExtSurface)
     DevBusyTimer.Start();
     while (MFX_ERR_MORE_DATA == sts || MFX_ERR_MORE_SURFACE == sts || MFX_ERR_NONE < sts)
     {
-        if (m_rawInput)
-        {
-            pExtSurface->pSurface = GetFreeSurface(false, MSDK_SURFACE_WAIT_INTERVAL);
-            sts = m_pBSProcessor->GetInputFrame(pExtSurface->pSurface);
-            MFX_CHECK_STS(sts);
-        }
-        else if (MFX_WRN_DEVICE_BUSY == sts)
+        if (MFX_WRN_DEVICE_BUSY == sts)
         {
             WaitForDeviceToBecomeFree(*m_pmfxSession,m_LastDecSyncPoint,sts);
         }
@@ -585,10 +571,7 @@ mfxStatus CTranscodingPipeline::DecodeOneFrame(ExtendedSurface *pExtSurface)
             MSDK_CHECK_POINTER_SAFE(pmfxSurface, MFX_ERR_MEMORY_ALLOC, msdk_printf(MSDK_STRING("ERROR: No free surfaces in decoder pool (during long period)\n"))); // return an error if a free surface wasn't found
         }
 
-        if (!m_rawInput)
-        {
-            sts = m_pmfxDEC->DecodeFrameAsync(m_pmfxBS, pmfxSurface, &pExtSurface->pSurface, &pExtSurface->Syncp);
-        }
+        sts = m_pmfxDEC->DecodeFrameAsync(m_pmfxBS, pmfxSurface, &pExtSurface->pSurface, &pExtSurface->Syncp);
 
         if ( (MFX_WRN_DEVICE_BUSY == sts) &&
              (DevBusyTimer.GetTime() > MSDK_WAIT_INTERVAL/1000) )
@@ -637,23 +620,15 @@ mfxStatus CTranscodingPipeline::DecodeLastFrame(ExtendedSurface *pExtSurface)
     // retrieve the buffered decoded frames
     while (MFX_ERR_MORE_SURFACE == sts || MFX_WRN_DEVICE_BUSY == sts)
     {
-        if (m_rawInput)
-        {
-            pExtSurface->pSurface = GetFreeSurface(false, MSDK_SURFACE_WAIT_INTERVAL);
-            sts = m_pBSProcessor->GetInputFrame(pExtSurface->pSurface);
-        }
-        else if (MFX_WRN_DEVICE_BUSY == sts)
+        if (MFX_WRN_DEVICE_BUSY == sts)
         {
             WaitForDeviceToBecomeFree(*m_pmfxSession,m_LastDecSyncPoint,sts);
         }
 
-        if (!m_rawInput)
-        {
-            // find new working surface
-            pmfxSurface = GetFreeSurface(true, MSDK_SURFACE_WAIT_INTERVAL);
-            MSDK_CHECK_POINTER_SAFE(pmfxSurface, MFX_ERR_MEMORY_ALLOC, msdk_printf(MSDK_STRING("ERROR: No free surfaces in decoder pool (during long period)\n"))); // return an error if a free surface wasn't found
-            sts = m_pmfxDEC->DecodeFrameAsync(NULL, pmfxSurface, &pExtSurface->pSurface, &pExtSurface->Syncp);
-        }
+        // find new working surface
+        pmfxSurface = GetFreeSurface(true, MSDK_SURFACE_WAIT_INTERVAL);
+        MSDK_CHECK_POINTER_SAFE(pmfxSurface, MFX_ERR_MEMORY_ALLOC, msdk_printf(MSDK_STRING("ERROR: No free surfaces in decoder pool (during long period)\n"))); // return an error if a free surface wasn't found
+        sts = m_pmfxDEC->DecodeFrameAsync(NULL, pmfxSurface, &pExtSurface->pSurface, &pExtSurface->Syncp);
 
         if ( (MFX_WRN_DEVICE_BUSY == sts) &&
              (DevBusyTimer.GetTime() > MSDK_WAIT_INTERVAL/1000) )
@@ -725,58 +700,16 @@ mfxStatus CTranscodingPipeline::VPPOneFrame(ExtendedSurface *pSurfaceIn, Extende
         else if (MFX_ERR_NONE < sts && pExtSurface->Syncp)
         {
             sts = MFX_ERR_NONE; // ignore warnings if output is available
-            if(MFX_FOURCC_RGB4 == out_surface->Info.FourCC  && pSurfaceIn->pSurface->Info.FourCC  !=  out_surface->Info.FourCC )
-            {
-            	auto msg = m_pCli->consume_message();
-            	while(!msg)
-            	{
-            		msg = m_pCli->consume_message();
-            		usleep(100);
-            	}
-            	std::cout << msg->get_topic() << ": " << msg->to_string() << std::endl;
-            	sts = overlay(pExtSurface);
-                MSDK_CHECK_STATUS(sts, "overlay1 failed");
-            }
-            // ==LOCAL MOD END
             break;
         }
         else
         {
-            // TODO : find better way to differentiate between decode and encode VPP
-            if(MFX_FOURCC_RGB4 == out_surface->Info.FourCC  && pSurfaceIn->pSurface->Info.FourCC  !=  out_surface->Info.FourCC )
-            {
-                sts = overlay(pExtSurface);
-                MSDK_CHECK_STATUS(sts, "overlay2 failed");
-            }
-
             break;
         }
     }
     return sts;
 
 } // mfxStatus CTranscodingPipeline::DecodeOneFrame(ExtendedSurface *pExtSurface)
-
-
-mfxStatus    CTranscodingPipeline::overlay(ExtendedSurface* pExtSurface)
-{
-    mfxFrameSurface1* frame = pExtSurface->pSurface;
-
-    m_pmfxVPP->SyncOperation(pExtSurface->Syncp, MSDK_WAIT_INTERVAL);
-    mfxSyncPoint  temp = pExtSurface->Syncp;
-    pExtSurface->Syncp = nullptr;
-    mfxStatus sts = m_pMFXAllocator->LockFrame(frame->Data.MemId, &frame->Data);
-    MSDK_CHECK_STATUS(sts, "m_pMFXAllocator->LockFrame failed");
-
-
-    cv::Mat outgoing_img = cv::Mat(frame->Info.Height, frame->Info.Width ,
-                                   CV_8UC4, MSDK_MIN( MSDK_MIN(frame->Data.R, frame->Data.G), frame->Data.B), frame->Data.Pitch);
-    cv::putText(outgoing_img, "framecnt", cv::Point(500,500), 0, 9, cv::Scalar(255, 0, 0, 255), 5, 8, false );
-
-    sts = m_pMFXAllocator->UnlockFrame(frame->Data.MemId, &frame->Data);
-    pExtSurface->Syncp  = temp;
-    return sts;
-}
-
 
 mfxStatus CTranscodingPipeline::EncodeOneFrame(ExtendedSurface *pExtSurface, mfxBitstreamWrapper *pBS)
 {
@@ -1007,7 +940,7 @@ mfxStatus CTranscodingPipeline::Decode()
             MSDK_BREAK_ON_ERROR(sts);
         }
 
-        if (m_pmfxVPP.get() && !m_rawInput)
+        if (m_pmfxVPP.get())
         {
             if (m_bIsFieldWeaving)
             {
@@ -1792,7 +1725,7 @@ mfxStatus CTranscodingPipeline::Transcode()
             m_mfxDecParams.mfx.FrameInfo.PicStruct = DecExtSurface.pSurface->Info.PicStruct;
         }
         // pre-process a frame
-        if (m_pmfxVPP.get() && bNeedDecodedFrames && !m_rawInput)
+        if (m_pmfxVPP.get() && bNeedDecodedFrames)
         {
             if (m_bIsFieldWeaving)
             {
@@ -2287,8 +2220,7 @@ mfxStatus CTranscodingPipeline::InitDecMfxParams(sInputParams *pInParams)
     // set memory pattern
     if (m_bUseOpaqueMemory)
         m_mfxDecParams.IOPattern = MFX_IOPATTERN_OUT_OPAQUE_MEMORY;
-    else if (pInParams->bForceSysMem || (MFX_IMPL_SOFTWARE == pInParams->libType)
-         || (pInParams->DecOutPattern == MFX_IOPATTERN_OUT_SYSTEM_MEMORY))
+    else if (pInParams->bForceSysMem || (MFX_IMPL_SOFTWARE == pInParams->libType))
         m_mfxDecParams.IOPattern = MFX_IOPATTERN_OUT_SYSTEM_MEMORY;
     else
         m_mfxDecParams.IOPattern = MFX_IOPATTERN_OUT_VIDEO_MEMORY;
@@ -2315,7 +2247,6 @@ mfxStatus CTranscodingPipeline::InitDecMfxParams(sInputParams *pInParams)
         m_mfxDecParams.mfx.FrameInfo.FourCC=pInParams->DecoderFourCC;
         m_mfxDecParams.mfx.FrameInfo.ChromaFormat=FourCCToChroma(pInParams->DecoderFourCC);
     }
-
 #if MFX_VERSION >= 1022
     /* SFC usage if enabled */
     if ((pInParams->bDecoderPostProcessing) &&
@@ -2872,14 +2803,6 @@ mfxStatus CTranscodingPipeline::AddLaStreams(mfxU16 width, mfxU16 height)
     return MFX_ERR_NONE;
 }
 
-mfxU32 CTranscodingPipeline::FileFourCC2EncFourCC(mfxU32 fcc)
-{
-    if (fcc == MFX_FOURCC_I420)
-        return MFX_FOURCC_NV12;
-    else
-        return fcc;
-}
-
 mfxStatus CTranscodingPipeline::InitVppMfxParams(sInputParams *pInParams)
 {
     MSDK_CHECK_POINTER(pInParams,  MFX_ERR_NULL_PTR);
@@ -2909,43 +2832,10 @@ mfxStatus CTranscodingPipeline::InitVppMfxParams(sInputParams *pInParams)
     // input frame info
     MSDK_MEMCPY_VAR(m_mfxVppParams.vpp.In, &m_mfxDecParams.mfx.FrameInfo, sizeof(mfxFrameInfo));
 
-    if (m_mfxVppParams.vpp.In.Width * m_mfxVppParams.vpp.In.Height == 0)
-    {
-        m_mfxVppParams.vpp.In.Width = MSDK_ALIGN32(pInParams->nDstWidth);
-        m_mfxVppParams.vpp.In.Height = MSDK_ALIGN32(pInParams->nDstHeight);
-    }
-
-    if (m_mfxVppParams.vpp.In.CropW * m_mfxVppParams.vpp.In.CropH == 0)
-    {
-        m_mfxVppParams.vpp.In.CropW = pInParams->nDstWidth;
-        m_mfxVppParams.vpp.In.CropH = pInParams->nDstHeight;
-    }
-
-    if (m_mfxVppParams.vpp.In.FrameRateExtN * m_mfxVppParams.vpp.In.FrameRateExtD == 0)
-    {
-        m_mfxVppParams.vpp.In.FrameRateExtN = 30;
-        m_mfxVppParams.vpp.In.FrameRateExtD = 1;
-    }
-
-    if (m_mfxVppParams.vpp.In.FourCC == 0)
-    {
-        m_mfxVppParams.vpp.In.FourCC = FileFourCC2EncFourCC(pInParams->DecodeId);
-        m_mfxVppParams.mfx.FrameInfo.ChromaFormat = FourCCToChroma(pInParams->DecoderFourCC);
-    }
-
-    if (m_rawInput)
-    {
-        m_mfxVppParams.mfx.FrameInfo.PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
-    }
-
     // fill output frame info
     MSDK_MEMCPY_VAR(m_mfxVppParams.vpp.Out, &m_mfxVppParams.vpp.In, sizeof(mfxFrameInfo));
 
-    if(pInParams->DecoderVPPFourCC)
-    {
-          m_mfxVppParams.vpp.Out.FourCC=pInParams->DecoderVPPFourCC;
-          m_mfxVppParams.vpp.Out.ChromaFormat=FourCCToChroma(pInParams->DecoderVPPFourCC);
-    }
+
     if(m_bIsFieldWeaving)
     {
         m_mfxVppParams.vpp.Out.PicStruct = MFX_PICSTRUCT_UNKNOWN;
@@ -3237,23 +3127,16 @@ mfxStatus CTranscodingPipeline::AllocFrames(mfxFrameAllocRequest *pRequest, bool
 
     for (i = 0; i < nSurfNum; i++)
     {
-        auto surface = std::unique_ptr<mfxFrameSurfaceWrap>(new mfxFrameSurfaceWrap);
+        auto surface = new mfxFrameSurfaceWrap;
         surface->Info = pRequest->Info;
 
-        if (m_rawInput)
-        {
-            sts = m_pMFXAllocator->Lock(m_pMFXAllocator->pthis, pResponse->mids[i], &(surface->Data));
-            MSDK_CHECK_STATUS(sts, "m_pMFXAllocator->Lock failed");
-        }
         // no actual memory is allocated if opaque memory type is used (surface pointers and MemId field remain 0)
-        else if (!m_bUseOpaqueMemory)
+        if (!m_bUseOpaqueMemory)
         {
             surface->Data.MemId = pResponse->mids[i];
         }
 
-        (isDecAlloc) ? m_pSurfaceDecPool.push_back(surface.get()) : m_pSurfaceEncPool.push_back(surface.get());
-
-        std::ignore = surface.release();
+        (isDecAlloc) ? m_pSurfaceDecPool.push_back(surface) : m_pSurfaceEncPool.push_back(surface);
     }
 
     (isDecAlloc) ? m_DecSurfaceType = pRequest->Type : m_EncSurfaceType = pRequest->Type;
@@ -3343,7 +3226,7 @@ mfxStatus CTranscodingPipeline::AllocFrames()
            sts = CorrectAsyncDepth(VPPOut, m_AsyncDepth);
            MSDK_CHECK_STATUS(sts, "CorrectAsyncDepth failed");
            /* WA for rendering: VPP should have at least 2 frames on output (for front & back buffer accordinally) */
-           if ((VPPOut.NumFrameSuggested <= 1) || (VPPOut.NumFrameMin <= 1))
+           if ((VPPOut.NumFrameSuggested == 1) || (VPPOut.NumFrameMin == 1))
            {
                VPPOut.NumFrameSuggested = 2;
                VPPOut.NumFrameMin = 2;
@@ -3390,12 +3273,6 @@ mfxStatus CTranscodingPipeline::AllocFrames()
             if(m_nVPPCompEnable) // WORKAROUND: Remove this if clause after problem with AllocID is fixed in library (mark_alloc++ should be left here)
             {
                 mark_alloc++;
-            }
-
-            if ((DecOut.NumFrameSuggested <= 1) || (DecOut.NumFrameMin <= 1))
-            {
-                DecOut.NumFrameSuggested = 2;
-                DecOut.NumFrameMin = 2;
             }
 
             sts = AllocFrames(&DecOut, true);
@@ -3641,35 +3518,11 @@ mfxStatus CTranscodingPipeline::Init(sInputParams *pParams,
                                      SafetySurfaceBuffer  *pBuffer,
                                      FileBitstreamProcessor   *pBSProc)
 {
-	msdk_printf("Entering init....\n");
     MSDK_CHECK_POINTER(pParams, MFX_ERR_NULL_PTR);
     MSDK_CHECK_POINTER(pMFXAllocator, MFX_ERR_NULL_PTR);
     MSDK_CHECK_POINTER(pBSProc, MFX_ERR_NULL_PTR);
     mfxStatus sts = MFX_ERR_NONE;
     m_MaxFramesForTranscode = pParams->MaxFrameNumber;
-    // MQTT related
-
-    const std::string SERVER_ADDRESS	{ "tcp://localhost:1884" };
-    const std::string CLIENT_ID		{ "async_consume" + pParams->nVppCompTileId };
-    //const std::string CLIENT_ID		{ "async_consume" };
-    const std::string persistDir    {"/home/movidius/mqttpersist"};
-    msdk_printf("2: Connecting to the MQTT server...\n");
-
-    mqtt::connect_options connOpts;
-    connOpts.set_keep_alive_interval(20);
-    connOpts.set_clean_session(true);
-    m_pCli =  std::unique_ptr<mqtt::async_client>( new mqtt::async_client(SERVER_ADDRESS, CLIENT_ID));
-    msdk_printf("1: Connecting to the MQTT2 server...\n");
-
-	try {
-		msdk_printf("Connecting to the MQTT server...");
-		m_pCli->connect(connOpts)->wait();
-		m_pCli->start_consuming();
-		m_pCli->subscribe("meta", 1)->wait();
-		std::cout << "OK" << std::endl;
-	} catch (const mqtt::exception &exc) {
-		std::cerr << exc.what() << std::endl;
-	}
     // if no number of frames for a particular session is undefined, default
     // value is 0xFFFFFFFF. Thus, use it as a marker to assign parent
     // MaxFramesForTranscode to m_MaxFramesForTranscode
@@ -3698,8 +3551,6 @@ mfxStatus CTranscodingPipeline::Init(sInputParams *pParams,
     m_encoderPluginParams = pParams->encoderPluginParams;
 
     m_encoderFourCC = pParams->EncoderFourCC;
-
-    m_rawInput = pParams->rawInput;
 
     m_bExtMBQP = pParams->bExtMBQP;
     m_bROIasQPMAP = pParams->bROIasQPMAP;
@@ -3841,7 +3692,7 @@ mfxStatus CTranscodingPipeline::Init(sInputParams *pParams,
     // opaque memory feature is available starting with API 1.3 and
     // can be used within 1 intra session or joined inter sessions only
     if (m_Version.Major >= 1 && m_Version.Minor >= 3 &&
-        (pParams->eMode == Native || pParams->bIsJoin) && !pParams->rawInput)
+        (pParams->eMode == Native || pParams->bIsJoin))
     {
         m_bUseOpaqueMemory = true;
     }
@@ -3864,15 +3715,12 @@ mfxStatus CTranscodingPipeline::Init(sInputParams *pParams,
     // Initialize pipeline components following downstream direction
     // Pre-init methods fill parameters and create components
 
-    if (!m_rawInput)
-    {
-        // Decode component initialization
-        sts = DecodePreInit(pParams);
-        if (MFX_ERR_MORE_DATA == sts)
-            return sts;
-        else
-            MSDK_CHECK_STATUS(sts,"DecodePreInit failed");
-    }
+    // Decode component initialization
+    sts = DecodePreInit(pParams);
+    if (MFX_ERR_MORE_DATA == sts)
+        return sts;
+    else
+        MSDK_CHECK_STATUS(sts,"DecodePreInit failed");
 
     // VPP component initialization
     sts = VPPPreInit(pParams);
@@ -4022,8 +3870,6 @@ mfxStatus CTranscodingPipeline::Init(sInputParams *pParams,
     {
         CParametersDumper::DumpLibraryConfiguration(m_strMfxParamsDumpFile, m_pmfxDEC.get(), m_pmfxVPP.get(), m_pmfxENC.get(), &m_mfxDecParams, &m_mfxVppParams, &m_mfxEncParams);
     }
-// pParams->nVppCompTileId
-
 
     m_bIsInit = true;
 

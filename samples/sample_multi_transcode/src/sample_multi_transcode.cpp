@@ -144,7 +144,6 @@ mfxStatus Launcher::Init(int argc, msdk_char *argv[])
 #endif
 
 #if defined(_WIN32) || defined(_WIN64)
-    ForceImplForSession(0);
     if (m_eDevType == MFX_HANDLE_D3D9_DEVICE_MANAGER)
     {
         m_pAllocParam.reset(new D3DAllocatorParams);
@@ -154,14 +153,12 @@ mfxStatus Launcher::Init(int argc, msdk_char *argv[])
         if (m_InputParamsArray[m_InputParamsArray.size() -1].eModeExt == VppCompOnly)
         {
             /* Rendering case */
-            sts = m_hwdev->Init(NULL, 1,
-                MSDKAdapter::GetNumber(0,MFX_IMPL_VIA_D3D9 | MFX_IMPL_BASETYPE(m_InputParamsArray[0].libType)) );
+            sts = m_hwdev->Init(NULL, 1, MSDKAdapter::GetNumber(0,MFX_IMPL_VIA_D3D9) );
             m_InputParamsArray[m_InputParamsArray.size() -1].m_hwdev = m_hwdev.get();
         }
         else /* NO RENDERING*/
         {
-            sts = m_hwdev->Init(NULL, 0,
-                MSDKAdapter::GetNumber(0,MFX_IMPL_VIA_D3D9 | MFX_IMPL_BASETYPE(m_InputParamsArray[0].libType)) );
+            sts = m_hwdev->Init(NULL, 0, MSDKAdapter::GetNumber(0,MFX_IMPL_VIA_D3D9) );
         }
         MSDK_CHECK_STATUS(sts, "m_hwdev->Init failed");
         sts = m_hwdev->GetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, (mfxHDL*)&hdl);
@@ -181,14 +178,12 @@ mfxStatus Launcher::Init(int argc, msdk_char *argv[])
         if (m_InputParamsArray[m_InputParamsArray.size() -1].eModeExt == VppCompOnly)
         {
             /* Rendering case */
-            sts = m_hwdev->Init(NULL, 1,
-                MSDKAdapter::GetNumber(0,MFX_IMPL_VIA_D3D11 | MFX_IMPL_BASETYPE(m_InputParamsArray[0].libType)) );
+            sts = m_hwdev->Init(NULL, 1, MSDKAdapter::GetNumber(0,MFX_IMPL_VIA_D3D11) );
             m_InputParamsArray[m_InputParamsArray.size() -1].m_hwdev = m_hwdev.get();
         }
         else /* NO RENDERING*/
         {
-            sts = m_hwdev->Init(NULL, 0,
-                MSDKAdapter::GetNumber(0,MFX_IMPL_VIA_D3D11 | MFX_IMPL_BASETYPE(m_InputParamsArray[0].libType)) );
+            sts = m_hwdev->Init(NULL, 0, MSDKAdapter::GetNumber(0,MFX_IMPL_VIA_D3D11) );
         }
         MSDK_CHECK_STATUS(sts, "m_hwdev->Init failed");
         sts = m_hwdev->GetHandle(MFX_HANDLE_D3D11_DEVICE, (mfxHDL*)&hdl);
@@ -336,11 +331,9 @@ mfxStatus Launcher::Init(int argc, msdk_char *argv[])
         {
             reader.reset(new CIVFFrameReader());
         }
-        else if (m_InputParamsArray[i].DecodeId == MFX_CODEC_RGB4 ||
-                 m_InputParamsArray[i].DecodeId == MFX_CODEC_I420 ||
-                 m_InputParamsArray[i].DecodeId == MFX_CODEC_NV12)
+        else if (m_InputParamsArray[i].DecodeId == MFX_CODEC_RGB4)
         {
-            // YUV reader for RGB4 overlay and raw input
+            // YUV reader for RGB4 overlay
             yuvreader.reset(new CSmplYUVReader());
         }
         else
@@ -359,7 +352,7 @@ mfxStatus Launcher::Init(int argc, msdk_char *argv[])
         {
             std::list<msdk_string> input;
             input.push_back(m_InputParamsArray[i].strSrcFile);
-            sts = yuvreader->Init(input, m_InputParamsArray[i].DecodeId);
+            sts = yuvreader->Init(input, MFX_FOURCC_RGB4);
             MSDK_CHECK_STATUS(sts, "m_YUVReader->Init failed");
             sts = m_pExtBSProcArray.back()->SetReader(yuvreader);
             MSDK_CHECK_STATUS(sts, "m_pExtBSProcArray.back()->SetReader failed");
@@ -911,8 +904,7 @@ mfxStatus Launcher::VerifyCrossSessionsOptions()
             m_InputParamsArray[i].EncoderFourCC ||
             m_InputParamsArray[i].DecoderFourCC ||
             m_InputParamsArray[i].nVppCompSrcH ||
-            m_InputParamsArray[i].nVppCompSrcW ||
-            m_InputParamsArray[i].DecoderVPPFourCC)
+            m_InputParamsArray[i].nVppCompSrcW)
         {
             bUseExternalAllocator = true;
         }
@@ -1120,12 +1112,7 @@ mfxStatus Launcher::CreateSafetyBuffers()
 
 void Launcher::Close()
 {
-    while(m_pThreadContextArray.size())
-    {
-        m_pThreadContextArray[m_pThreadContextArray.size() - 1].reset();
-        m_pThreadContextArray.pop_back();
-    }
-
+    m_pThreadContextArray.clear();
     m_pAllocArray.clear();
     m_pBufferArray.clear();
     m_pExtBSProcArray.clear();
