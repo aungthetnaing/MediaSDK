@@ -1,0 +1,6 @@
+-i::h265 /home/movidius/mdk/examples/refApps/AICamera_generic/pc/mbnet_videoStream4kHevc.h265  -hw -vpp_comp_dst_x 0 -vpp_comp_dst_y 0 -vpp_comp_dst_w 1920 -vpp_comp_dst_h 1080  -vpp_comp_tile_id 0  -dcvpp::rgb4   -vafamily::mobilenetssd -label mobilenet_ssd_labels.txt -join -o::sink
+-i::h265 /home/movidius/mdk/examples/refApps/AICamera_generic/pc/mbnet_videoStream4kHevc.h265  -hw -vpp_comp_dst_x 1920 -vpp_comp_dst_y 0  -vpp_comp_dst_w 1920 -vpp_comp_dst_h 1080  -vpp_comp_tile_id 1  -dcvpp::rgb4  -vafamily::mobilenetssd -label mobilenet_ssd_labels.txt  -join -o::sink
+-i::h265 /home/movidius/mdk/examples/refApps/AICamera_generic/pc/mbnet_videoStream4kHevc.h265  -hw -vpp_comp_dst_x 0 -vpp_comp_dst_y 1080 -vpp_comp_dst_w 1920 -vpp_comp_dst_h 1080  -vpp_comp_tile_id 2  -dcvpp::rgb4   -vafamily::mobilenetssd  -label mobilenet_ssd_labels.txt -join -o::sink
+-i::h265 /home/movidius/mdk/examples/refApps/AICamera_generic/pc/mbnet_videoStream4kHevc.h265  -hw -vpp_comp_dst_x 1920 -vpp_comp_dst_y 1080  -vpp_comp_dst_w 1920 -vpp_comp_dst_h 1080  -vpp_comp_tile_id 3  -dcvpp::rgb4   -vafamily::avafd -label mobilenet_ssd_labels.txt -join -o::sink
+-vpp_comp_only 4 -vpp_comp_num_tiles 4 -rx11     -fps 30   -ec::rgb4  -ext_allocator   -join -i::source
+
