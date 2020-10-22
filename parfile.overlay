@@ -1,0 +1,4 @@
+-i::h264 /home/movidius/host_setup/testfiles/11.h264 -hw -vpp_comp_dst_x 0 -vpp_comp_dst_y 0 -vpp_comp_dst_w 960 -vpp_comp_dst_h 540  -vpp_comp_tile_id 0   -dcvpp::rgb4 -join -o::sink
+-i::h264 /home/movidius/host_setup/testfiles/12.h264 -hw -vpp_comp_dst_x 960 -vpp_comp_dst_y 0  -vpp_comp_dst_w 960 -vpp_comp_dst_h 540  -vpp_comp_tile_id 1  -dcvpp::rgb4 -join -o::sink
+-vpp_comp_only 2 -vpp_comp_num_tiles 2 -rx11     -fps 30   -ec::rgb4  -ext_allocator   -join -i::source
+

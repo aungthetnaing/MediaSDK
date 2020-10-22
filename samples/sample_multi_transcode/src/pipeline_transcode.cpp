@@ -50,7 +50,7 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 #endif
 
 using namespace TranscodingSample;
-
+#define MSDK_MIN(A, B)                           (((A) < (B)) ? (A) : (B))
 #ifdef ENABLE_MCTF
 namespace TranscodingSample
 {
@@ -349,7 +349,8 @@ mfxStatus CTranscodingPipeline::VPPPreInit(sInputParams *pParams)
 #ifdef ENABLE_MCTF
             (VPP_FILTER_DISABLED != pParams->mctfParam.mode) ||
 #endif
-             (pParams->EncoderFourCC && decoderFourCC && pParams->EncoderFourCC != decoderFourCC && m_bEncodeEnable))
+             (pParams->EncoderFourCC && decoderFourCC && pParams->EncoderFourCC != decoderFourCC && m_bEncodeEnable) ||
+			 (pParams->DecoderVPPFourCC && decoderFourCC && pParams->DecoderVPPFourCC != decoderFourCC && m_bDecodeEnable))
         {
             if (m_bIsFieldWeaving || m_bIsFieldSplitting)
             {
@@ -606,6 +607,25 @@ mfxStatus CTranscodingPipeline::DecodeOneFrame(ExtendedSurface *pExtSurface)
     return sts;
 
 } // mfxStatus CTranscodingPipeline::DecodeOneFrame(ExtendedSurface *pExtSurface)
+mfxStatus    CTranscodingPipeline::overlay(ExtendedSurface* pExtSurface)
+{
+    mfxFrameSurface1* frame = pExtSurface->pSurface;
+
+    m_pmfxVPP->SyncOperation(pExtSurface->Syncp, MSDK_WAIT_INTERVAL);
+    mfxSyncPoint  temp = pExtSurface->Syncp;
+    pExtSurface->Syncp = nullptr;
+    mfxStatus sts = m_pMFXAllocator->LockFrame(frame->Data.MemId, &frame->Data);
+    MSDK_CHECK_STATUS(sts, "m_pMFXAllocator->LockFrame failed");
+
+
+    cv::Mat outgoing_img = cv::Mat(frame->Info.Height, frame->Info.Width ,
+                                   CV_8UC4, MSDK_MIN( MSDK_MIN(frame->Data.R, frame->Data.G), frame->Data.B), frame->Data.Pitch);
+    cv::putText(outgoing_img, "framecnt", cv::Point(500,500), 0, 9, cv::Scalar(255, 0, 0, 255), 5, 8, false );
+
+    sts = m_pMFXAllocator->UnlockFrame(frame->Data.MemId, &frame->Data);
+    pExtSurface->Syncp  = temp;
+    return sts;
+}
 mfxStatus CTranscodingPipeline::DecodeLastFrame(ExtendedSurface *pExtSurface)
 {
     MFX_ITT_TASK("DecodeLastFrame");
@@ -692,25 +712,43 @@ mfxStatus CTranscodingPipeline::VPPOneFrame(ExtendedSurface *pSurfaceIn, Extende
     }
 #endif
 
-    for(;;)
-    {
-        sts = m_pmfxVPP->RunFrameVPPAsync(pSurfaceIn->pSurface, out_surface, NULL, &pExtSurface->Syncp);
+	for (;;) {
+		sts = m_pmfxVPP->RunFrameVPPAsync(pSurfaceIn->pSurface, out_surface,
+				NULL, &pExtSurface->Syncp);
 
-        if (MFX_ERR_NONE < sts && !pExtSurface->Syncp) // repeat the call if warning and no output
-        {
-            if (MFX_WRN_DEVICE_BUSY == sts)
-                MSDK_SLEEP(1); // wait if device is busy
-        }
-        else if (MFX_ERR_NONE < sts && pExtSurface->Syncp)
-        {
-            sts = MFX_ERR_NONE; // ignore warnings if output is available
-            break;
-        }
-        else
-        {
-            break;
-        }
-    }
+		if (MFX_ERR_NONE < sts && !pExtSurface->Syncp) // repeat the call if warning and no output
+				{
+			if (MFX_WRN_DEVICE_BUSY == sts)
+				MSDK_SLEEP(1); // wait if device is busy
+		} else if (MFX_ERR_NONE < sts && pExtSurface->Syncp) {
+			sts = MFX_ERR_NONE; // ignore warnings if output is available
+			if (MFX_FOURCC_RGB4 == out_surface->Info.FourCC
+					&& pSurfaceIn->pSurface->Info.FourCC
+							!= out_surface->Info.FourCC) {
+//				auto msg = m_pCli->consume_message();
+//				while (!msg) {
+//					msg = m_pCli->consume_message();
+//					usleep(100);
+//				}
+//				std::cout << msg->get_topic() << ": " << msg->to_string()
+//						<< std::endl;
+				sts = overlay(pExtSurface);
+				MSDK_CHECK_STATUS(sts, "overlay1 failed");
+			}
+			// ==LOCAL MOD END
+			break;
+		} else {
+			// TODO : find better way to differentiate between decode and encode VPP
+			if (MFX_FOURCC_RGB4 == out_surface->Info.FourCC
+					&& pSurfaceIn->pSurface->Info.FourCC
+							!= out_surface->Info.FourCC) {
+				sts = overlay(pExtSurface);
+				MSDK_CHECK_STATUS(sts, "overlay2 failed");
+			}
+
+			break;
+		}
+	}
     return sts;
 
 } // mfxStatus CTranscodingPipeline::DecodeOneFrame(ExtendedSurface *pExtSurface)

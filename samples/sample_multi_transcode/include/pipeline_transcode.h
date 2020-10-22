@@ -53,6 +53,7 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 #include "sample_defs.h"
 #include "plugin_utils.h"
 #include "preset_manager.h"
+#include "mqtt/async_client.h"
 
 #if (MFX_VERSION >= 1024)
 #include "brc_routines.h"
@@ -309,7 +310,7 @@ namespace TranscodingSample
         mfxU16 nVppCompTileId;
 
         mfxU32 DecoderFourCC;
-        mfxU32 EncoderVPPFourCC;
+        mfxU32 DecoderVPPFourCC;
         mfxU32 EncoderFourCC;
 
         sVppCompDstRect* pVppCompDstRects;
@@ -672,6 +673,7 @@ namespace TranscodingSample
         virtual mfxStatus Encode();
         virtual mfxStatus Transcode();
         virtual mfxStatus DecodeOneFrame(ExtendedSurface *pExtSurface);
+        mfxStatus overlay(ExtendedSurface* pExtSurface);
         virtual mfxStatus DecodeLastFrame(ExtendedSurface *pExtSurface);
         virtual mfxStatus VPPOneFrame(ExtendedSurface *pSurfaceIn, ExtendedSurface *pExtSurface);
         virtual mfxStatus EncodeOneFrame(ExtendedSurface *pExtSurface, mfxBitstreamWrapper *pBS);
@@ -773,6 +775,7 @@ namespace TranscodingSample
         std::unique_ptr<MFXPlugin>        m_pUserDecoderPlugin;
         std::unique_ptr<MFXPlugin>        m_pUserEncoderPlugin;
         std::unique_ptr<MFXPlugin>        m_pUserEncPlugin;
+        std::unique_ptr<mqtt::async_client> m_pCli;
 
         mfxFrameAllocResponse           m_mfxDecResponse;  // memory allocation response for decoder
         mfxFrameAllocResponse           m_mfxEncResponse;  // memory allocation response for encoder
