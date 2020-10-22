@@ -4678,6 +4678,9 @@ FileBitstreamProcessor::~FileBitstreamProcessor()
         m_pFileReader->Close();
     if (m_pFileWriter.get())
         m_pFileWriter->Close();
+#ifdef USE_FFMPEG_DEMUX
+    closeDemuxControl(&m_demuxCtrl);
+#endif
 }
 
 mfxStatus FileBitstreamProcessor::SetReader(std::unique_ptr<CSmplYUVReader>& reader)
@@ -4687,12 +4690,19 @@ mfxStatus FileBitstreamProcessor::SetReader(std::unique_ptr<CSmplYUVReader>& rea
     return MFX_ERR_NONE;
 }
 
-mfxStatus FileBitstreamProcessor::SetReader(std::unique_ptr<CSmplBitstreamReader>& reader)
-{
-    m_pFileReader = std::move(reader);
-    m_Bitstream.Extend(1024 * 1024);
-
-    return MFX_ERR_NONE;
+mfxStatus FileBitstreamProcessor::SetReader(
+		std::unique_ptr<CSmplBitstreamReader> &reader) {
+#ifdef USE_FFMPEG_DEMUX
+	if(reader->getFileName()[0]) {
+		m_demuxCtrl.enableOutput = true;
+	}
+	mfxStatus sts = openDemuxControl(&m_demuxCtrl, reader->getFileName());
+	// MSDK_CHECK_STATUS(sts, MFX_ERR_NONE,"openDmuxCtronl failed." );
+#else
+	m_pFileReader = std::move(reader);
+	m_Bitstream.Extend(1024 * 1024);
+	return MFX_ERR_NONE;
+#endif
 }
 
 mfxStatus FileBitstreamProcessor::SetWriter(std::unique_ptr<CSmplBitstreamWriter>& writer)
@@ -4704,11 +4714,17 @@ mfxStatus FileBitstreamProcessor::SetWriter(std::unique_ptr<CSmplBitstreamWriter
 
 mfxStatus FileBitstreamProcessor::GetInputBitstream(mfxBitstreamWrapper **pBitstream)
 {
+	mfxStatus sts = MFX_ERR_NONE;
+#ifdef USE_FFMPEG_DEMUX
+	sts = ffmpegReadFrame(&m_Bitstream, &m_demuxCtrl);
+	// MSDK_CHECK_STATUS(sts, MFX_ERR_NONE, sts);
+#else
     if (!m_pFileReader.get())
     {
         return MFX_ERR_UNSUPPORTED;
     }
-    mfxStatus sts = m_pFileReader->ReadNextFrame(&m_Bitstream);
+    sts = m_pFileReader->ReadNextFrame(&m_Bitstream);
+#endif
     if (MFX_ERR_NONE == sts)
     {
         *pBitstream = &m_Bitstream;

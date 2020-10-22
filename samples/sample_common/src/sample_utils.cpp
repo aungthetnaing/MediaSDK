@@ -618,6 +618,7 @@ CSmplBitstreamReader::CSmplBitstreamReader()
 {
     m_fSource = NULL;
     m_bInited = false;
+    m_strFileName[0] = NULL;
 }
 
 CSmplBitstreamReader::~CSmplBitstreamReader()
@@ -644,6 +645,11 @@ void CSmplBitstreamReader::Reset()
     fseek(m_fSource, 0, SEEK_SET);
 }
 
+const char*   CSmplBitstreamReader::getFileName()const
+{
+    return m_strFileName;
+};
+
 mfxStatus CSmplBitstreamReader::Init(const msdk_char *strFileName)
 {
     MSDK_CHECK_POINTER(strFileName, MFX_ERR_NULL_PTR);
@@ -651,6 +657,7 @@ mfxStatus CSmplBitstreamReader::Init(const msdk_char *strFileName)
         return MFX_ERR_NONE;
 
     Close();
+    msdk_strncopy_s (m_strFileName, MSDK_MAX_FILENAME_LEN, strFileName, MSDK_MAX_FILENAME_LEN - 1);
 
     //open file to read input stream
     MSDK_FOPEN(m_fSource, strFileName, MSDK_STRING("rb"));

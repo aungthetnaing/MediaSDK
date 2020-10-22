@@ -55,6 +55,8 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 #include "preset_manager.h"
 #include "mqtt/async_client.h"
 
+#include "ffmpeg_utils.h"
+
 #if (MFX_VERSION >= 1024)
 #include "brc_routines.h"
 #endif
@@ -614,6 +616,7 @@ namespace TranscodingSample
         // for performance options can be zero
         std::unique_ptr<CSmplBitstreamWriter> m_pFileWriter;
         mfxBitstreamWrapper m_Bitstream;
+        demuxControl	    m_demuxCtrl;
     private:
         DISALLOW_COPY_AND_ASSIGN(FileBitstreamProcessor);
     };

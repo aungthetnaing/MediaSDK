@@ -55,7 +55,7 @@ or https://software.intel.com/en-us/media-client-solutions-support.
 #include "avc_headers.h"
 #include "avc_nal_spl.h"
 
-
+#define MSDK_MAX_FILENAME_LEN 1024
 // A macro to disallow the copy constructor and operator= functions
 // This should be used in the private: declarations for a class
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
@@ -848,10 +848,12 @@ public :
     virtual void      Close();
     virtual mfxStatus Init(const msdk_char *strFileName);
     virtual mfxStatus ReadNextFrame(mfxBitstream *pBS);
+    virtual const char*  getFileName()const;
 
 protected:
     FILE*     m_fSource;
     bool      m_bInited;
+    msdk_char  m_strFileName[MSDK_MAX_FILENAME_LEN];
 };
 
 class CH264FrameReader : public CSmplBitstreamReader
