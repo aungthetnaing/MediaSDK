@@ -2877,7 +2877,11 @@ mfxStatus CTranscodingPipeline::InitVppMfxParams(sInputParams *pInParams)
     // fill output frame info
     MSDK_MEMCPY_VAR(m_mfxVppParams.vpp.Out, &m_mfxVppParams.vpp.In, sizeof(mfxFrameInfo));
 
-
+    if(pInParams->DecoderVPPFourCC)
+    {
+          m_mfxVppParams.vpp.Out.FourCC=pInParams->DecoderVPPFourCC;
+          m_mfxVppParams.vpp.Out.ChromaFormat=FourCCToChroma(pInParams->DecoderVPPFourCC);
+    }
     if(m_bIsFieldWeaving)
     {
         m_mfxVppParams.vpp.Out.PicStruct = MFX_PICSTRUCT_UNKNOWN;
@@ -3268,7 +3272,7 @@ mfxStatus CTranscodingPipeline::AllocFrames()
            sts = CorrectAsyncDepth(VPPOut, m_AsyncDepth);
            MSDK_CHECK_STATUS(sts, "CorrectAsyncDepth failed");
            /* WA for rendering: VPP should have at least 2 frames on output (for front & back buffer accordinally) */
-           if ((VPPOut.NumFrameSuggested == 1) || (VPPOut.NumFrameMin == 1))
+           if ((VPPOut.NumFrameSuggested <= 1) || (VPPOut.NumFrameMin <= 1))
            {
                VPPOut.NumFrameSuggested = 2;
                VPPOut.NumFrameMin = 2;
