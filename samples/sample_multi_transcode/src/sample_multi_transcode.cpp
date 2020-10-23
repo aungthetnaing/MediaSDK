@@ -343,10 +343,22 @@ mfxStatus Launcher::Init(int argc, msdk_char *argv[])
 
         if (reader.get())
         {
-            sts = reader->Init(m_InputParamsArray[i].strSrcFile);
-            MSDK_CHECK_STATUS(sts, "reader->Init failed");
-            sts = m_pExtBSProcArray.back()->SetReader(reader);
-            MSDK_CHECK_STATUS(sts, "m_pExtBSProcArray.back()->SetReader failed");
+        	bool fileExist = false;
+        	{
+        	  ifstream f(m_InputParamsArray[i].strSrcFile);
+        	  fileExist = f.good();
+			}
+			if (fileExist) {
+				sts = reader->Init(m_InputParamsArray[i].strSrcFile);
+				MSDK_CHECK_STATUS(sts, "reader->Init failed");
+				sts = m_pExtBSProcArray.back()->SetReader(reader);
+				MSDK_CHECK_STATUS(sts,
+						"m_pExtBSProcArray.back()->SetReader failed");
+			}
+			else
+			{
+				msdk_printf("FILE not exist %s\n", m_InputParamsArray[i].strSrcFile);
+			}
         }
         else if (yuvreader.get())
         {

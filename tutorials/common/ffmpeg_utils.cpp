@@ -768,19 +768,28 @@ mfxStatus ffmpegReadFrame(mfxBitstream* pBS, demuxControl* filterCtrl) {
     int res = 0;
     bool videoFrameFound = false;
     AVPacket packet;
+    // Not enough memory to read new chunk of data
+	if (pBS->MaxLength == pBS->DataLength) {
+		printf("Reached maximum buffer %lu, %lu\n", pBS->MaxLength,
+				pBS->DataLength);
+		return MFX_ERR_NOT_ENOUGH_BUFFER;
+	}
 
     // Read until video frame is found or no more video frames in container.
+
     while(!videoFrameFound)
     {
         if(!av_read_frame(filterCtrl->avfCtx, &packet))
         {
             if(packet.stream_index == filterCtrl->videoIdx)
             {
-                if(filterCtrl->enableFilter)
+                printf("Processing video\n");
+            	if(filterCtrl->enableFilter)
                 {
                     //
                     // Apply MP4 to H264 Annex B filter on buffer
                     //
+            		 printf("Processing filter\n");
                     res = av_bsf_send_packet(filterCtrl->bsfCtx, &packet);
                     if (res < 0) {
                         return MFX_ERR_UNDEFINED_BEHAVIOR;
@@ -797,10 +806,13 @@ mfxStatus ffmpegReadFrame(mfxBitstream* pBS, demuxControl* filterCtrl) {
                 //
                 // Copy filtered buffer to bitstream
                 //
+            	printf("Copying buffer\n");
                 memmove(pBS->Data, pBS->Data + pBS->DataOffset, pBS->DataLength);
+                printf("mem-move\n");
                         pBS->DataOffset = 0;
                         memcpy(pBS->Data + pBS->DataLength, packet.data, packet.size);
                         pBS->DataLength += packet.size;
+                printf("Copying buffer2\n");
 
                 av_packet_unref(&packet);
 
