@@ -81,6 +81,28 @@ namespace TranscodingSample
 }
 #endif
 
+unsigned int MFX_STDCALL TranscodingSample::CTranscodingPipeline::DecodeMetaFunc(void* ctx)
+{
+    CTranscodingPipeline* pipeline = (CTranscodingPipeline*)ctx;
+
+    mfxStatus sts;
+    sts = pipeline->DecodeMetaLoop();
+    return 0;
+}
+
+mfxStatus CTranscodingPipeline::DecodeMetaLoop(void)
+{
+	m_bMetaArrived = false;
+	std::cout << "starting thread " << std::endl;
+	while (true) {
+		auto msg = m_pCli->consume_message();
+		if(!msg)
+		{
+			m_bMetaArrived = true;
+		    std::cout << m_streamId << msg->get_topic() << ": " << msg->to_string() << std::endl;
+		}
+	}
+}
 
 // set structure to define values
 sInputParams::sInputParams() : __sInputParams()
@@ -3577,6 +3599,7 @@ mfxStatus CTranscodingPipeline::Init(sInputParams *pParams,
     mfxStatus sts = MFX_ERR_NONE;
     m_MaxFramesForTranscode = pParams->MaxFrameNumber;
 	const std::string SERVER_ADDRESS { "tcp://localhost:1884" };
+	m_streamId = pParams->nVppCompTileId;
 	const std::string CLIENT_ID { "async_consume" + pParams->nVppCompTileId };
 	//const std::string CLIENT_ID		{ "async_consume" };
 	const std::string persistDir { "/home/movidius/mqttpersist" };
@@ -3593,11 +3616,13 @@ mfxStatus CTranscodingPipeline::Init(sInputParams *pParams,
 		msdk_printf("Connecting to the MQTT server...");
 		m_pCli->connect(connOpts)->wait();
 		m_pCli->start_consuming();
-		m_pCli->subscribe("meta")->wait();
+		m_pCli->subscribe("meta", 1)->wait();
 		std::cout << "OK" << std::endl;
 	} catch (const mqtt::exception &exc) {
 		std::cerr << exc.what() << std::endl;
 	}
+
+
        // if no number of frames for
     // if no number of frames for a particular session is undefined, default
     // value is 0xFFFFFFFF. Thus, use it as a marker to assign parent
@@ -4531,6 +4556,7 @@ mfxStatus CTranscodingPipeline::Join(MFXVideoSession *pChildSession)
 mfxStatus CTranscodingPipeline::Run()
 {
     mfxStatus sts = MFX_ERR_NONE;
+    MSDKThread *pMetaThread = NULL;
 
     msdk_stringstream ss;
     if (m_bDecodeEnable && m_bEncodeEnable)
@@ -4541,6 +4567,15 @@ mfxStatus CTranscodingPipeline::Run()
     }
     else if (m_bDecodeEnable)
     {
+		pMetaThread = new MSDKThread(sts, DecodeMetaFunc, this);
+		if (!pMetaThread) {
+			MSDK_SAFE_DELETE(pMetaThread);
+
+			return MFX_ERR_MEMORY_ALLOC;
+		}
+		std::cout << "waiting for thread " << std::endl;
+    	while(!m_bMetaArrived)usleep(100);
+    	std::cout << "waiting for thread done " << std::endl;
         sts = Decode();
         ss << MSDK_STRING("CTranscodingPipeline::Run::Decode() [") << GetSessionText() << MSDK_STRING("] failed");
         MSDK_CHECK_STATUS(sts, ss.str());

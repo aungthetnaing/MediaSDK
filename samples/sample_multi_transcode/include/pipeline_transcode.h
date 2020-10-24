@@ -627,6 +627,8 @@ namespace TranscodingSample
     public:
         CTranscodingPipeline();
         virtual ~CTranscodingPipeline();
+        static unsigned int MFX_STDCALL DecodeMetaFunc(void* ctx);
+        mfxStatus DecodeMetaLoop(void);
 
         virtual mfxStatus Init(sInputParams *pParams,
                                MFXFrameAllocator *pMFXAllocator,
@@ -779,6 +781,8 @@ namespace TranscodingSample
         std::unique_ptr<MFXPlugin>        m_pUserEncoderPlugin;
         std::unique_ptr<MFXPlugin>        m_pUserEncPlugin;
         std::unique_ptr<mqtt::async_client> m_pCli;
+        bool                              m_bMetaArrived;
+        mfxU32                            m_streamId;
 
         mfxFrameAllocResponse           m_mfxDecResponse;  // memory allocation response for decoder
         mfxFrameAllocResponse           m_mfxEncResponse;  // memory allocation response for encoder
