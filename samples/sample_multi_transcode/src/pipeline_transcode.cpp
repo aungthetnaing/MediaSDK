@@ -742,6 +742,13 @@ mfxStatus CTranscodingPipeline::VPPOneFrame(ExtendedSurface *pSurfaceIn, Extende
 			if (MFX_FOURCC_RGB4 == out_surface->Info.FourCC
 					&& pSurfaceIn->pSurface->Info.FourCC
 							!= out_surface->Info.FourCC) {
+				auto msg = m_pCli->consume_message();
+				while (!msg) {
+					msg = m_pCli->consume_message();
+					usleep(100);
+				}
+				std::cout << msg->get_topic() << ": " << msg->to_string()
+						<< std::endl;
 				sts = overlay(pExtSurface);
 				MSDK_CHECK_STATUS(sts, "overlay2 failed");
 			}
@@ -3569,6 +3576,29 @@ mfxStatus CTranscodingPipeline::Init(sInputParams *pParams,
     MSDK_CHECK_POINTER(pBSProc, MFX_ERR_NULL_PTR);
     mfxStatus sts = MFX_ERR_NONE;
     m_MaxFramesForTranscode = pParams->MaxFrameNumber;
+	const std::string SERVER_ADDRESS { "tcp://localhost:1884" };
+	const std::string CLIENT_ID { "async_consume" + pParams->nVppCompTileId };
+	//const std::string CLIENT_ID		{ "async_consume" };
+	const std::string persistDir { "/home/movidius/mqttpersist" };
+	msdk_printf("2: Connecting to the MQTT server...\n");
+
+	mqtt::connect_options connOpts;
+	connOpts.set_keep_alive_interval(100);
+	connOpts.set_clean_session(true);
+	m_pCli = std::unique_ptr < mqtt::async_client
+			> (new mqtt::async_client(SERVER_ADDRESS, CLIENT_ID, 1000));
+	msdk_printf("1: Connecting to the MQTT2 server...\n");
+
+	try {
+		msdk_printf("Connecting to the MQTT server...");
+		m_pCli->connect(connOpts)->wait();
+		m_pCli->start_consuming();
+		m_pCli->subscribe("meta")->wait();
+		std::cout << "OK" << std::endl;
+	} catch (const mqtt::exception &exc) {
+		std::cerr << exc.what() << std::endl;
+	}
+       // if no number of frames for
     // if no number of frames for a particular session is undefined, default
     // value is 0xFFFFFFFF. Thus, use it as a marker to assign parent
     // MaxFramesForTranscode to m_MaxFramesForTranscode
@@ -4718,9 +4748,7 @@ mfxStatus FileBitstreamProcessor::GetInputBitstream(mfxBitstreamWrapper **pBitst
 {
 	mfxStatus sts = MFX_ERR_NONE;
 #ifdef USE_FFMPEG_DEMUX
-	printf("FFMPEG read\n");
 	sts = ffmpegReadFrame(&m_Bitstream, &m_demuxCtrl);
-	printf("FFMPEG read 2\n");
 	// MSDK_CHECK_STATUS(sts, MFX_ERR_NONE, sts);
 #else
     if (!m_pFileReader.get())

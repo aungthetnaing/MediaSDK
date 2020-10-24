@@ -484,7 +484,6 @@ mfxStatus openDemuxControl(demuxControl* ffmpegCtrl, const char *filename) {
     av_register_all();
 
     // Open input container
-    printf("Open once %s\n", filename);
     int res = avformat_open_input(&ffmpegCtrl->avfCtx, filename, NULL, NULL);
     if(res) {
         printf("FFMPEG: Could not open input container %s\n", filename);
@@ -806,13 +805,14 @@ mfxStatus ffmpegReadFrame(mfxBitstream* pBS, demuxControl* filterCtrl) {
                 //
                 // Copy filtered buffer to bitstream
                 //
-            	printf("Copying buffer\n");
-                memmove(pBS->Data, pBS->Data + pBS->DataOffset, pBS->DataLength);
-                printf("mem-move\n");
-                        pBS->DataOffset = 0;
-                        memcpy(pBS->Data + pBS->DataLength, packet.data, packet.size);
-                        pBS->DataLength += packet.size;
-                printf("Copying buffer2\n");
+
+                memmove(pBS->Data, pBS->Data + pBS->DataOffset,
+						pBS->DataLength);
+
+				pBS->DataOffset = 0;
+				memcpy(pBS->Data + pBS->DataLength, packet.data, packet.size);
+				pBS->DataLength += packet.size;
+
 
                 av_packet_unref(&packet);
 
